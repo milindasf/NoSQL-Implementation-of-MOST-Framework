@@ -10,20 +10,19 @@ import java.io.File;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Map;
 
+import org.neo4j.cypher.javacompat.ExecutionEngine;
+import org.neo4j.cypher.javacompat.ExecutionResult;
 import org.neo4j.graphdb.Direction;
 import org.neo4j.graphdb.Node;
-import org.neo4j.graphdb.Path;
 import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.RelationshipType;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
-import org.neo4j.graphdb.traversal.Evaluators;
-import org.neo4j.graphdb.traversal.TraversalDescription;
-import org.neo4j.graphdb.traversal.Traverser;
 import org.neo4j.kernel.EmbeddedGraphDatabase;
-import org.neo4j.kernel.Traversal;
 
 public class Database {
 
@@ -33,6 +32,8 @@ public class Database {
 	private File dbFolder;
 	private Node startNode;
 	private Date date;
+	private ExecutionEngine execute_eng;
+	private ExecutionResult result;
 
 	public Database(String databasePath) {
 
@@ -55,6 +56,7 @@ public class Database {
 			graphDb = (EmbeddedGraphDatabase) graphDbFactory
 					.newEmbeddedDatabase(databasePath);
 			this.createStartNode();
+			execute_eng = new ExecutionEngine(this.graphDb);
 		}
 
 		registerShutdownHook(graphDb);// To Ensure that the database is shutdown
@@ -172,20 +174,18 @@ public class Database {
 
 	public int getZoneCount() {
 
-		TraversalDescription td = Traversal.description().breadthFirst()
-				.relationships(RelTypes.HasZone, Direction.OUTGOING)
-				.evaluator(Evaluators.excludeStartPosition());
-
-		Traverser zoneCount = td.traverse(this.startNode);
-		// System.out.println(this.startNode.getProperty("Message"));
-		Iterator<Path> iterator = zoneCount.iterator();
-
 		int numberOfZones = 0;
+		String cypher = "START n=NODE(1) MATCH n-[:HasZone]->zone RETURN COUNT(DISTINCT zone) AS Number_Of_Zones;";
+		try {
 
-		while (iterator.hasNext()) {
-
-			numberOfZones++;
-			iterator.next();
+			result = execute_eng.execute(cypher);
+			Iterator<Long> n_column = result.columnAs("Number_Of_Zones");
+			while (n_column.hasNext()) {
+				numberOfZones = Integer.parseInt(n_column.next().toString());
+			}
+		} catch (Exception e) {
+			System.out.println("Error Occured while executing the querry");
+			numberOfZones = -1;
 		}
 
 		return numberOfZones;
@@ -205,6 +205,11 @@ public class Database {
 
 		} else {
 			Node temp_datapoint;
+			temp_datapoint = this.getDatapointByName(p_datapoint_name);
+			if (temp_datapoint != null) {
+				state = false; // This is for check duplicate datapoints;
+				return state;
+			}
 			Transaction tx = graphDb.beginTx();
 			try {
 
@@ -260,22 +265,19 @@ public class Database {
 	public Node getZoneByID(int p_idzone) {
 
 		Node temp = null;
-
-		TraversalDescription td = Traversal.description().breadthFirst()
-				.relationships(RelTypes.HasZone, Direction.OUTGOING)
-				.evaluator(Evaluators.excludeStartPosition());
-
-		Traverser traverser = td.traverse(this.startNode);
-		Iterator<Path> iterator = traverser.iterator();
-
-		while (iterator.hasNext()) {
-
-			temp = iterator.next().endNode();
-			// System.out.println(temp.getProperty("idzone"));
-			if (temp.getProperty("idzone").equals(new Integer(p_idzone))) {
-				break;
+		Map<String, Object> params = new HashMap<String, Object>();
+		params.put("idzone", p_idzone);
+		String cypher = "START n=NODE(1) MATCH n-[:HasZone]->zone WHERE zone.idzone={idzone} RETURN zone;";
+		try {
+			result = execute_eng.execute(cypher, params);
+			Iterator<Node> iterator = result.columnAs("zone");
+			while (iterator.hasNext()) {
+				temp = iterator.next();
 			}
 
+		} catch (Exception e) {
+			System.out.println("Error Occured while executing querry");
+			temp = null;
 		}
 
 		return temp;
@@ -285,55 +287,35 @@ public class Database {
 
 		boolean state = false;
 
-		TraversalDescription td = Traversal.description().breadthFirst()
-				.relationships(RelTypes.HasDatapoint, Direction.OUTGOING)
-				.evaluator(Evaluators.excludeStartPosition());
+		Node temp = this.getDatapointByName(p_datapoint_name);
+		Node zone = this.getZoneByID(p_idzone);
 
-		Traverser traverser = td.traverse(this.startNode);
-		Iterator<Path> iterator = traverser.iterator();
-		Node temp;
-		Node zone;
-		Path temp_path;
-		while (iterator.hasNext()) {
-			temp_path = iterator.next();
-			temp = temp_path.endNode();
-			// System.out.println(temp.getProperty("datapoint_name").toString());
-			if (temp.getProperty("datapoint_name").equals(p_datapoint_name)) {
-				zone = this.getZoneByID(p_idzone);
-				if (zone != null) {
-					Transaction tx = graphDb.beginTx();
-					try {
-						temp.setProperty("idzone", p_idzone);
-						System.out.println(temp
-								.getSingleRelationship(RelTypes.HasDatapoint,
-										Direction.INCOMING)
-								.getProperty("timestamp").toString());
-						temp.getSingleRelationship(RelTypes.HasDatapoint,
-								Direction.INCOMING).delete();
-						System.out.println("Zoneid:"
-								+ zone.getProperty("idzone"));
-						System.out.println("datapoint:"
-								+ temp.getProperty("datapoint_name"));
-						Relationship rel = zone.createRelationshipTo(temp,
-								RelTypes.HasDatapoint);
-						rel.setProperty("timestamp",
-								new Timestamp(this.date.getTime()).toString());
-						tx.success();
-						state = true;
-					} catch (Exception e) {
-						System.out
-								.println("Error occured while adding the datapoint");
-						e.printStackTrace();
-						tx.failure();
-					} finally {
-						tx.finish();
+		if (temp != null & zone != null) {
 
-					}
-				} else {
-					state = false;
-				}
-				break;
+			Transaction tx = this.graphDb.beginTx();
+			try {
+				temp.setProperty("idzone", p_idzone);
+				temp.getSingleRelationship(RelTypes.HasDatapoint,
+						Direction.INCOMING).delete();
+				Relationship rel = zone.createRelationshipTo(temp,
+						RelTypes.HasDatapoint);
+				rel.setProperty("timestamp",
+						new Timestamp(this.date.getTime()).toString());
+				tx.success();
+				state = true;
+
+			} catch (Exception e) {
+
+				System.out.println("Error occured while adding the datapoint");
+				e.printStackTrace();
+				tx.failure();
+
+			} finally {
+				tx.finish();
 			}
+
+		} else {
+			state = false;
 
 		}
 
@@ -344,26 +326,29 @@ public class Database {
 	public Node getDatapointByName(String p_datapoint_name) {
 
 		Node temp = null;
+		Map<String, Object> params = new HashMap<String, Object>();
+		params.put("datapoint_name", p_datapoint_name);
+		String cypher = "START n=NODE(1) MATCH n-[:HasZone]->()-[:HasDatapoint]->datapoint WHERE datapoint.datapoint_name={datapoint_name} RETURN datapoint;";
+		try {
+			result = execute_eng.execute(cypher, params);
+			Iterator<Node> iterator = result.columnAs("datapoint");
+			if (iterator.hasNext()) {
+				temp = iterator.next();
 
-		TraversalDescription td = Traversal.description().breadthFirst()
-				.relationships(RelTypes.HasDatapoint)
-				.relationships(RelTypes.HasZone, Direction.INCOMING)
-				.relationships(RelTypes.HasDatapoint, Direction.INCOMING)
-				.evaluator(Evaluators.excludeStartPosition());
-
-		Traverser traverser = td.traverse(this.startNode);
-
-		Iterator<Path> iterator = traverser.iterator();
-
-		while (iterator.hasNext()) {
-
-			temp = iterator.next().endNode();
-			// System.out.println(temp.getProperty("idzone"));
-			if (temp.getProperty("datapoint_name").toString()
-					.equals(p_datapoint_name)) {
-				break;
+			} else {
+				cypher = "START n=NODE(1) MATCH n-[:HasDatapoint]->datapoint WHERE datapoint.datapoint_name={datapoint_name} RETURN datapoint;";
+				result = execute_eng.execute(cypher, params);
+				iterator = result.columnAs("datapoint");
+				if (iterator.hasNext()) {
+					temp = iterator.next();
+				} else {
+					temp = null;
+				}
 			}
 
+		} catch (Exception e) {
+			System.out.println("Error occured while executing querry");
+			temp = null;
 		}
 
 		return temp;
@@ -502,22 +487,27 @@ public class Database {
 
 	public int getConnectionCount() {
 
-		TraversalDescription td = Traversal.description().breadthFirst()
-				.relationships(RelTypes.HasConnection, Direction.OUTGOING)
-				.evaluator(Evaluators.excludeStartPosition());
-
-		Traverser connectionCount = td.traverse(this.startNode);
-		// System.out.println(this.startNode.getProperty("Message"));
-		Iterator<Path> iterator = connectionCount.iterator();
-
 		int numberOfConnections = 0;
+		String cypher = "START n=NODE(1) MATCH n-[:HasDatapoint]->()-[:HasConnection]->connection  RETURN COUNT(DISTINCT connection) AS Number_Of_Connections;";
+		try {
+			result = execute_eng.execute(cypher);
+			Iterator<Long> iterator = result.columnAs("Number_Of_Connections");
+			if (iterator.hasNext()) {
+				numberOfConnections += Integer.parseInt(iterator.next()
+						.toString());
+			}
+			cypher = "START n=NODE(1) MATCH n-[:HasZone]->()-[:HasDatapoint]->()-[:HasConnection]->connection  RETURN COUNT(DISTINCT connection) AS Number_Of_Connections;";
+			result = execute_eng.execute(cypher);
+			iterator = result.columnAs("Number_Of_Connections");
+			if (iterator.hasNext()) {
+				numberOfConnections += Integer.parseInt(iterator.next()
+						.toString());
+			}
 
-		while (iterator.hasNext()) {
+		} catch (Exception e) {
+			System.out.println("Error Occured while executing querry");
 
-			numberOfConnections++;
-			iterator.next();
 		}
-
 		return numberOfConnections;
 
 	}

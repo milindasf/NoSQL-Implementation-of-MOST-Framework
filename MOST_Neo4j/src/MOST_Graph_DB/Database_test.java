@@ -20,6 +20,48 @@ public class Database_test {
 		db.CreateDatabase();
 	}
 
+	// @Test
+	// public void TestGeneral() {
+	//
+	// assertEquals(0, db.getZoneCount());
+	// boolean state;
+	// state = db.addZone("Zone_1", "This is a test Zone", "Sri lanka",
+	// "Colombo", "Sri lanka", "dematagoda", "Bank of Ceylon",
+	// "1st floor", "234", 234.2, 800.32);
+	// assertEquals(true, state);
+	// assertEquals(1, db.getZoneCount());
+	// Node temp = db.getZoneByID(0);
+	// assertEquals(temp.getProperty("idzone"), 0);
+	//
+	// state = db.addZone("Zone_2", "This is a test Zone", "Sri lanka",
+	// "Colombo", "Sri lanka", "dematagoda", "Bank of Ceylon",
+	// "1st floor", "234", 234.2, 800.32);
+	// assertEquals(true, state);
+	// assertEquals(2, db.getZoneCount());
+	// state = db.addDatapoint("datapoint_1", "this is a test datapoint", "",
+	// 0.323, 0.00, 12.230, 323.32, 23.32, 3232.232, 12.212, "+ -",
+	// "virtual", "hello", "This is a test");
+	// assertEquals(true, state);
+	// state = db.addDatapoint("datapoint_2", "this is a test datapoint", "",
+	// 0.323, 0.00, 12.230, 323.32, 23.32, 3232.232, 12.212, "+ -",
+	// "virtual", "hello", "This is a test");
+	// assertEquals(true, state);
+	// assertEquals("datapoint_1", db.getDatapointByName("datapoint_1")
+	// .getProperty("datapoint_name"));
+	// state = db.addDatapointToZone("datapoint_1", 0);
+	// assertEquals(true, state);
+	// assertEquals("datapoint_1", db.getDatapointByName("datapoint_1")
+	// .getProperty("datapoint_name"));
+	// assertEquals("datapoint_2", db.getDatapointByName("datapoint_2")
+	// .getProperty("datapoint_name"));
+	// state = db.addConnection("datapoint_1", "Test device", "wireless",
+	// "7273987293", false, "wireshark", "Samsung", "832HJ");
+	// assertEquals(true, state);
+	// assertEquals(1, db.getConnectionCount());
+	//
+	// }
+	//
+
 	@Test
 	public void TestZoneCount() {
 		assertEquals(0, db.getZoneCount());
@@ -32,12 +74,12 @@ public class Database_test {
 				"Colombo", "Sri lanka", "dematagoda", "Bank of Ceylon",
 				"1st floor", "234", 234.2, 800.32);
 		assertEquals(true, state);
-		// assertEquals(1, db.getZoneCount());
+		assertEquals(1, db.getZoneCount());
 		state = db.addZone("Zone_2", "This is a test Zone", "Sri lanka",
 				"Colombo", "Sri lanka", "dematagoda", "Bank of Ceylon",
 				"1st floor", "234", 234.2, 800.32);
 		assertEquals(true, state);
-		// assertEquals(2, db.getZoneCount());
+		assertEquals(2, db.getZoneCount());
 
 	}
 
@@ -48,6 +90,17 @@ public class Database_test {
 				0.323, 0.00, 12.230, 323.32, 23.32, 3232.232, 12.212, "+ -",
 				"virtual", "hello", "This is a test");
 		assertEquals(true, state);
+
+		state = db.addDatapoint("datapoint_2", "this is a test datapoint", "",
+				0.323, 0.00, 12.230, 323.32, 23.32, 3232.232, 12.212, "+ -",
+				"virtual", "hello", "This is a test");
+		assertEquals(true, state);
+
+		state = db.addDatapoint("datapoint_1", "this is a test datapoint", "",
+				0.323, 0.00, 12.230, 323.32, 23.32, 3232.232, 12.212, "+ -",
+				"virtual", "hello", "This is a test");
+		assertEquals(false, state);
+
 	}
 
 	@Test
