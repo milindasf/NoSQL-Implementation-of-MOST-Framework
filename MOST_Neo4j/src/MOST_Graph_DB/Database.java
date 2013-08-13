@@ -367,7 +367,7 @@ public class Database {
 			try {
 				data = this.graphDb.createNode();
 				data.setProperty("datapoint_name", p_datapoint_name);
-				data.setProperty("datetime", p_datetime);
+				data.setProperty("timestamp", p_datetime);
 				data.setProperty("value", p_value);
 
 				Relationship rel = datapoint.createRelationshipTo(data,
@@ -512,4 +512,214 @@ public class Database {
 
 	}
 
+	public boolean addData(String p_datapoint_name, String p_timestamp,
+			Double p_value) {
+
+		boolean state = false;
+		boolean constraints = true; // This variable will remain in true if all
+									// the constraints are not violated...
+		int errorCode = 0;
+		// ERRORCODES: - { 10,11,12,13,14 }
+		String cypherQuerry = "";
+		Double lastValue = null;
+		String lastTimestamp = "";
+		Integer timeStampDif = null;
+		Double dpDeadband = null;
+		Double maxValue = null;
+		Double minValue = null;
+		Integer sampleInterval = null;
+		Integer sampleIntervalMin = null;
+
+		Node datapoint = this.getDatapointByName(p_datapoint_name);
+		Node data;
+		Map<String, Object> params = new HashMap<String, Object>();
+		params.put("node_id", datapoint.getId());
+		params.put("p_timestamp", p_timestamp);
+		cypherQuerry = "START n = NODE({node_id}) MATCH n-[:HasData]->data WHERE data.timestamp<={p_timestamp} RETURN MIN(data.timestamp) AS MinTimeStamp,data;";
+		try {
+
+			result = execute_eng.execute(cypherQuerry, params);
+			Iterator<Node> iterator = result.columnAs("data");
+			if (iterator.hasNext()) {
+				data = iterator.next();
+				lastTimestamp = data.getProperty("timestamp").toString();
+				lastValue = Double.parseDouble(data.getProperty("value")
+						.toString());
+
+			}
+
+		} catch (Exception e) {
+			System.out.println("Error Occured while Executing the Querry");
+			return false;
+		}
+
+		Timestamp lasttime = Timestamp.valueOf(lastTimestamp);
+		Timestamp timestamp = Timestamp.valueOf(p_timestamp);
+
+		timeStampDif = (int) (timestamp.getTime() - lasttime.getTime()) / 1000;
+
+		dpDeadband = Double.parseDouble(datapoint.getProperty("deadband")
+				.toString());
+		maxValue = Double.parseDouble(datapoint.getProperty("max").toString());
+		minValue = Double.parseDouble(datapoint.getProperty("min").toString());
+		sampleInterval = Integer.parseInt(datapoint.getProperty(
+				"sample_interval").toString());
+		sampleIntervalMin = Integer.parseInt(datapoint.getProperty(
+				"sample_interval_min").toString());
+
+		// ######CONSTRAINTS################
+		// # MINVALUE CONSTRAINT
+		// # ignore if min is NULL
+		// # ERROR CODE -13
+
+		// MIN Value Constraint
+		if (minValue != null) {
+
+			if (p_value < minValue) {
+				constraints = false;
+				errorCode = -13;
+				System.out.println("Error code:-13");
+				return false;
+			}
+
+		}
+		// Max value Constraint
+		if (maxValue != null) {
+			if (p_value > maxValue) {
+				constraints = false;
+				errorCode = -12;
+				System.out.println("Error code:-12");
+				return false;
+			}
+
+		}
+		params.clear();
+		params.put("node_id", datapoint.getId());
+		cypherQuerry = "START n= NODE({node_id}) MATCH n-[:HasData]->data RETURN data;";
+		try {
+
+			result = execute_eng.execute(cypherQuerry, params);
+			Iterator<Node> iterator = result.columnAs("data");
+
+			if (!iterator.hasNext()) {
+
+				Transaction tx = this.graphDb.beginTx();
+				try {
+
+					data = this.graphDb.createNode();
+					data.setProperty("datapoint_name", p_datapoint_name);
+					data.setProperty("timestamp", p_timestamp);
+					data.setProperty("value", p_value);
+
+					Relationship rel = datapoint.createRelationshipTo(data,
+							RelTypes.HasData);
+					rel.setProperty("timestamp",
+							new Time(date.getTime()).toString());
+					tx.success();
+
+				} catch (Exception b) {
+					System.out
+							.println("Error Occured While updating data node in database");
+					tx.failure();
+				} finally {
+					tx.finish();
+				}
+				state = true;
+				return true;
+			}
+
+		} catch (Exception e) {
+
+			System.out.println("Error Occured while Executing the Querry");
+			return false;
+
+		}
+
+		// # SAMPLE_INTERVAL CONSTRAINT
+		// # ignore if sampleInterval is NULL --> go to deadband and
+		// sample_interval_min check
+		// # Note: if something < null --> false; same for >, etc. --> works
+		// # return SELECT 2 if outside of sample_interval
+		//
+		if (sampleInterval == null || timeStampDif < sampleInterval) {
+
+			// # inside sample_interval (or sampleInterval is NULL) -->
+			//
+			// # MIN SAMPLE INTERVAL CONSTRAINT
+			// # ignore if sampleIntervalMin is NULL
+			// # ERROR CODE -10
+
+			if (sampleIntervalMin != null && timeStampDif < sampleIntervalMin) {
+
+				errorCode = -10;
+				System.out.println("Error code:-10");
+				return false;
+			} else if (dpDeadband == null
+					|| ((p_value < (-dpDeadband / 2 + lastValue)) && (p_value > (dpDeadband / 2 + lastValue)))) {
+				// #DEADBAND CONSTRAINT
+				// # ignore if deadband is NULL
+				// # Note: if something < null --> false; same for >, etc. -->
+				// works
+				// # tested:
+				// "SELECT IF(true OR 10 NOT BETWEEN (- null/2 + 5) AND (null/2 + 5),2,3);"
+				// #ERROR CODE -11
+				Transaction tx = this.graphDb.beginTx();
+				try {
+					data = this.graphDb.createNode();
+					data.setProperty("datapoint_name", p_datapoint_name);
+					data.setProperty("timestamp", p_timestamp);
+					data.setProperty("value", p_value);
+
+					Relationship rel = datapoint.createRelationshipTo(data,
+							RelTypes.HasData);
+					rel.setProperty("timestamp",
+							new Time(date.getTime()).toString());
+					tx.success();
+				} catch (Exception e) {
+					System.out
+							.println("Error Occured While updating data node in database");
+					tx.failure();
+				} finally {
+					tx.finish();
+				}
+
+				return true;
+
+			} else {
+				errorCode = -11;
+				System.out.println("Error Code:-11");
+				return false;
+
+			}
+
+		} else {
+
+			// # sample interval exceeded - value is inserted
+			// #added because outside of sample_interval
+
+			Transaction tx = this.graphDb.beginTx();
+			try {
+				data = this.graphDb.createNode();
+				data.setProperty("datapoint_name", p_datapoint_name);
+				data.setProperty("timestamp", p_timestamp);
+				data.setProperty("value", p_value);
+
+				Relationship rel = datapoint.createRelationshipTo(data,
+						RelTypes.HasData);
+				rel.setProperty("timestamp",
+						new Time(date.getTime()).toString());
+				tx.success();
+			} catch (Exception e) {
+				System.out
+						.println("Error Occured While updating data node in database");
+				tx.failure();
+			} finally {
+				tx.finish();
+			}
+
+			return true;
+
+		}
+
+	}
 }

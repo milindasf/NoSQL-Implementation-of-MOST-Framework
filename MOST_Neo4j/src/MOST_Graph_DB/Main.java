@@ -4,6 +4,8 @@ import java.io.File;
 import java.sql.Timestamp;
 import java.util.Date;
 
+import org.neo4j.graphdb.Node;
+
 public class Main {
 
 	public static void main(String[] args) {
@@ -30,16 +32,18 @@ public class Main {
 			System.out.println(state);
 			state = db.addDatapointToZone("datapoint_1", 0);
 			System.out.println(state);
-			// Node datapoint = db.getDatapointByName("datapoint_1");
-			// System.out.println(datapoint.getProperty("datapoint_name")
-			// .toString());
-			// state = db.addConnection("datapoint_1", "Test device",
-			// "wireless",
-			// "7273987293", false, "wireshark", "Samsung", "832HJ");
-			// System.out.println(state);
-			// System.out.println("Number of Connections:"
-			// + db.getConnectionCount());
+			Node datapoint = db.getDatapointByName("datapoint_1");
+			System.out.println("Datapoint_1 Node ID:" + datapoint.getId());
+			System.out.println(datapoint.getProperty("datapoint_name")
+					.toString());
+			state = db.addConnection("datapoint_1", "Test device", "wireless",
+					"7273987293", false, "wireshark", "Samsung", "832HJ");
+			System.out.println(state);
+			System.out.println("Number of Connections:"
+					+ db.getConnectionCount());
 			System.out.println(new Timestamp(new Date().getTime()).toString());
+			// db.addData("datapoint_1", "", 232.32);
+
 		} catch (Exception e) {
 			e.printStackTrace();
 
