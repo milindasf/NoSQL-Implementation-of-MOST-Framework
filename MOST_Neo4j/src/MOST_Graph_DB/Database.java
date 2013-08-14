@@ -535,7 +535,7 @@ public class Database {
 		Map<String, Object> params = new HashMap<String, Object>();
 		params.put("node_id", datapoint.getId());
 		params.put("p_timestamp", p_timestamp);
-		cypherQuerry = "START n = NODE({node_id}) MATCH n-[:HasData]->data WHERE data.timestamp<={p_timestamp} RETURN MIN(data.timestamp) AS MinTimeStamp,data;";
+		cypherQuerry = "START n = NODE({node_id}) MATCH n-[:HasData]->data WHERE data.timestamp<={p_timestamp} RETURN MIN(data.timestamp) AS MinTimeStamp,data LIMIT 1;";
 		try {
 
 			result = execute_eng.execute(cypherQuerry, params);
@@ -722,4 +722,102 @@ public class Database {
 		}
 
 	}
+
+	public Node[] getValues(String p_datapoint_name, String p_starttime,
+			String p_endtime) {
+
+		Node[] data = null;
+		Timestamp starttime;
+		Timestamp endtime;
+		int timeDiff;
+		String cypherQuerry = "";
+		Node datapoint = this.getDatapointByName(p_datapoint_name);
+		Map<String, Object> params = new HashMap<String, Object>();
+		params.put("node_id", datapoint.getId());
+
+		try {
+
+			starttime = Timestamp.valueOf(p_starttime);
+			endtime = Timestamp.valueOf(p_endtime);
+			timeDiff = (int) (endtime.getTime() - starttime.getTime()) / 1000;
+			if (timeDiff < 0) {
+				System.out.println("endtime must be later than starttime!");
+				data = null;
+				return data;
+			} else {
+
+				if (p_starttime == null) {
+
+					if (p_endtime == null) {
+
+						params.clear();
+						params.put("node_id", datapoint.getId());
+						cypherQuerry = "START n=NODE ({node_id}) MATCH n-[:HasData]->data RETURN data ORDER BY data.timestamp DESC LIMIT 1;";
+						result = execute_eng.execute(cypherQuerry, params);
+						Iterator<Node> iterator = result.columnAs("data");
+						data = null;
+						if (iterator.hasNext()) {
+							data[0] = iterator.next();
+							return data;
+						}
+
+					} else {
+						params.clear();
+						params.put("node_id", datapoint.getId());
+						params.put("endtime", p_endtime);
+						cypherQuerry = "START n= NODE({node_id}) MATCH n-[:HasData]->data WHERE data.timestamp <={endtime} RETURN data ORDER BY data.timestamp DESC LIMIT 1;";
+						result = execute_eng.execute(cypherQuerry, params);
+						Iterator<Node> iterator = result.columnAs("data");
+						data = null;
+						if (iterator.hasNext()) {
+							data[0] = iterator.next();
+							return data;
+						}
+
+					}
+
+				} else if (p_endtime == null) {
+					params.clear();
+					params.put("node_id", datapoint.getId());
+					params.put("starttime", p_starttime);
+					cypherQuerry = "START n=NODE ({node_id}) MATCH n-[:HasData]->data WHERE data.timestamp>={starttime} RETURN data ORDER BY data.timestamp ASC;";
+					result = execute_eng.execute(cypherQuerry, params);
+					Iterator<Node> iterator = result.columnAs("data");
+					data = null;
+					if (iterator.hasNext()) {
+						data[0] = iterator.next();
+						return data;
+					}
+
+				} else {
+					params.clear();
+					params.put("node_id", datapoint.getId());
+					params.put("starttime", p_starttime);
+					params.put("endtime", p_endtime);
+					cypherQuerry = "START n=NODE ({node_id}) MATCH n-[:HasData]->data WHERE data.timestamp>={starttime} AND data.timestamp<={endtime} RETURN data ORDER BY data.timestamp;";
+					result = execute_eng.execute(cypherQuerry, params);
+					Iterator<Node> iterator = result.columnAs("data");
+					data = null;
+					int i = 0;
+					while (iterator.hasNext()) {
+						data[i] = iterator.next();
+						i++;
+					}
+
+					return data;
+
+				}
+
+			}
+
+		} catch (Exception e) {
+
+			System.out
+					.println("Error Occured while reading data from database.");
+			data = null;
+		}
+
+		return data;
+	}
+
 }

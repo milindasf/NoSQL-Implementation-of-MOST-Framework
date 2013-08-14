@@ -42,6 +42,15 @@ public class Main {
 			System.out.println("Number of Connections:"
 					+ db.getConnectionCount());
 			System.out.println(new Timestamp(new Date().getTime()).toString());
+			db.addDataForced("datapoint_1",
+					new Timestamp(new Date().getTime()).toString(), 20.01);
+			db.addDataForced("datapoint_1",
+					new Timestamp(new Date().getTime()).toString(), 22.23);
+			db.addDataForced("datapoint_1",
+					new Timestamp(new Date().getTime()).toString(), 19.01);
+			db.addDataForced("datapoint_1",
+					new Timestamp(new Date().getTime()).toString(), 23.01);
+
 			// db.addData("datapoint_1", "", 232.32);
 
 		} catch (Exception e) {
